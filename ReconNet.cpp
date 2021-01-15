@@ -1,6 +1,7 @@
 #include <hls_video.h>
 
 #include "ap_fixed.h"
+#include "weights.h"
 #include <iostream>
 
 using namespace std;
@@ -72,6 +73,7 @@ void conv_layer(hls::stream<data_type> &out, hls::stream<data_type> &in,
 						}
                 // cout << sum << endl;
 				out << relu(sum/* + bias[filter]*/);
+                // assert(0);
 			}
 
 
@@ -93,19 +95,6 @@ void conv_layer(hls::stream<data_type> &out, hls::stream<data_type> &in,
 		}
 }
 
-template<int KERNEL_SIZE, int CHANNELS, int FILTERS>
-void load_weight(data_type ary_in[KERNEL_SIZE*KERNEL_SIZE*CHANNELS*FILTERS], data_type weight[KERNEL_SIZE][KERNEL_SIZE][CHANNELS][FILTERS]){
-    for(int i = 0 ; i < FILTERS ; i++){
-        for(int j = 0 ; j < KERNEL_SIZE ; j++){
-            for(int k = 0 ; k < KERNEL_SIZE ; k++){
-                for(int l = 0 ; l < CHANNELS ; l++){
-                    weight[j][k][l][i] = ary_in[i*KERNEL_SIZE*KERNEL_SIZE*CHANNELS+j*KERNEL_SIZE*CHANNELS+k*CHANNELS+l];
-                }
-            }
-        }
-    }
-}
-
 template<int PAD_SIZE>
 void pad_layer(hls::stream<data_type> &out, hls::stream<data_type> &in){
     for(int x = -PAD_SIZE ; x < IMAGE_SIZE+PAD_SIZE ; x++){
@@ -121,33 +110,12 @@ void pad_layer(hls::stream<data_type> &out, hls::stream<data_type> &in){
 }
 
 void ReconNet(hls::stream<data_type> &img_in_stream,
-            data_type kernel1_ary[11*11],
-            data_type kernel2_ary[1*1] ,
-            data_type kernel3_ary[7*7] ,
-            data_type kernel4_ary[11*11],
-            data_type kernel5_ary[1*1] ,
-            data_type kernel6_ary[7*7] ,
             hls::stream<data_type> &img_out_stream
          ){
 	#pragma HLS INTERFACE axis port = img_out_stream
 	#pragma HLS INTERFACE axis port = img_in_stream 
 	// #pragma HLS INTERFACE m_axi depth=69120 port = weight
 	#pragma HLS INTERFACE s_axilite port=return bundle=CONTROL
-
-    data_type kernel1_weight[11][11][1][1];
-    data_type kernel2_weight[1][1][1][1];
-    data_type kernel3_weight[7][7][1][1];
-    data_type kernel4_weight[11][11][1][1];
-    data_type kernel5_weight[1][1][1][1];
-    data_type kernel6_weight[7][7][1][1];
-
-    // load data to BRAM
-    load_weight<11, 1, 1>(kernel1_ary, kernel1_weight);
-    load_weight<1, 1, 1>(kernel2_ary, kernel2_weight);
-    load_weight<7, 1, 1>(kernel3_ary, kernel3_weight);
-    load_weight<11, 1, 1>(kernel4_ary, kernel4_weight);
-    load_weight<1, 1, 1>(kernel5_ary, kernel5_weight);
-    load_weight<7, 1, 1>(kernel6_ary, kernel6_weight);
 
     #pragma dataflow
 
@@ -160,6 +128,7 @@ void ReconNet(hls::stream<data_type> &img_in_stream,
 	hls::stream<data_type> conv2_pad_out;
 	hls::stream<data_type> conv3_pad_out;
 	hls::stream<data_type> conv5_pad_out;
+    
     // Start image streaming
 	pad_layer<5>(img_pad_out, img_in_stream);
 	conv_layer<43, 1, 11, 1, 1, 1>(conv1_out, img_pad_out, kernel1_weight/*, kernel1_bias*/);
