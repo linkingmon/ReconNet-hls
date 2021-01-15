@@ -4,7 +4,7 @@ add_files -tb  ReconNet_test.cpp
 add_files -tb  golden/img_in.txt
 add_files -tb  golden/img_out.txt
 set_top ReconNet
-open_solution "solution1"
+open_solution "solution2"
 source "directives.tcl"
 set_part {xc7z020clg484-1}
 create_clock -period 10
