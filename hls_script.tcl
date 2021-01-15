@@ -10,8 +10,8 @@ set_part {xc7z020clg484-1}
 create_clock -period 10
 
 csim_design
-# csynth_design
-# cosim_design -tool xsim
-# export_design -rtl verilog -format ip_catalog
+csynth_design
+cosim_design -tool xsim
+export_design -rtl verilog -format ip_catalog
 close_project
 quit

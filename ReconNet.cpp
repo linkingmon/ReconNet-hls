@@ -48,12 +48,20 @@ void conv_layer(hls::stream<data_type> &out, hls::stream<data_type> &in,
 	int i, j, k, filter;
 	data_type sum, placeholder;
 	int row_offset, col_offset, channel_offset;
-	hls::LineBuffer<INPUT_SIZE * INPUT_CHANNELS * (KERNEL_SIZE -1) + KERNEL_SIZE * INPUT_CHANNELS, 1, data_type> conv_buff;
+	hls::LineBuffer<INPUT_SIZE * (KERNEL_SIZE -1) + KERNEL_SIZE , INPUT_CHANNELS, data_type> conv_buff;
+	// hls::LineBuffer<INPUT_SIZE * INPUT_CHANNELS * (KERNEL_SIZE -1) + KERNEL_SIZE * INPUT_CHANNELS, 1, data_type> conv_buff;
 
-	for(i = 0 ; i < INPUT_SIZE * INPUT_CHANNELS * (KERNEL_SIZE -1) + KERNEL_SIZE * INPUT_CHANNELS; i++) {
-        check_read(in, placeholder);
-        conv_buff.shift_up(0);
-        conv_buff.insert_top(placeholder, 0);
+	// for(i = 0 ; i < INPUT_SIZE * INPUT_CHANNELS * (KERNEL_SIZE -1) + KERNEL_SIZE * INPUT_CHANNELS; i++) {
+    //     check_read(in, placeholder);
+    //     conv_buff.shift_up(0);
+    //     conv_buff.insert_top(placeholder, 0);
+	// }
+	for(i = 0 ; i < INPUT_SIZE * (KERNEL_SIZE -1) + KERNEL_SIZE ; i++) {
+		for(int p = 0 ; p < INPUT_CHANNELS ;  p++){
+			check_read(in, placeholder);
+			conv_buff.shift_up(p);
+			conv_buff.insert_top(placeholder, p);
+		}
 	}
 
 	for (i = 0 ; i < (INPUT_SIZE - KERNEL_SIZE + 1); i += STRIDE)
@@ -66,10 +74,12 @@ void conv_layer(hls::stream<data_type> &out, hls::stream<data_type> &in,
 							// #pragma HLS pipeline
 							int t1, t2;
 							static data_type val1, val2;
-							t1 = row_offset * INPUT_SIZE * INPUT_CHANNELS;
-							t2 = col_offset * INPUT_CHANNELS;
-							val1 = conv_buff.getval(t1 + t2 + channel_offset,
-									0);
+							// t1 = row_offset * INPUT_SIZE * INPUT_CHANNELS;
+							// t2 = col_offset * INPUT_CHANNELS;
+							// val1 = conv_buff.getval(t1 + t2 + channel_offset, 0);
+							t1 = row_offset * INPUT_SIZE;
+							t2 = col_offset;
+							val1 = conv_buff.getval(t1 + t2, channel_offset);
 							val2 = weight[row_offset][col_offset][channel_offset][filter];
 							sum += val1 * val2;
                             // cout << "(" << row_offset << "," << col_offset << "," << channel_offset << "," << filter << ") >> (" << val1 << "," << val2 << ")" << endl;
@@ -81,20 +91,28 @@ void conv_layer(hls::stream<data_type> &out, hls::stream<data_type> &in,
 
 
 			if ((j + STRIDE < (INPUT_SIZE - KERNEL_SIZE + 1))) {
-				for (int p = 0 ; p < INPUT_CHANNELS ; p++)
-					if (in.empty() == 0) {
+				for (int p = 0 ; p < INPUT_CHANNELS ; p++){
+					check_read(in, placeholder);
+					// conv_buff.shift_up(0);
+					// conv_buff.insert_top(placeholder, 0);
+					conv_buff.shift_up(p);
+					conv_buff.insert_top(placeholder, p);
+				}
+			} 
+			else if ((i + STRIDE < (INPUT_SIZE - KERNEL_SIZE + 1)) && (j + STRIDE >= (INPUT_SIZE - KERNEL_SIZE + 1))){
+				// for (int p = 0 ; p < KERNEL_SIZE * INPUT_CHANNELS ; p++){
+				// 	check_read(in, placeholder);
+				// 	conv_buff.shift_up(0);
+				// 	conv_buff.insert_top(placeholder, 0);
+				// }
+				for (int k = 0 ; k < KERNEL_SIZE ; k++){
+					for (int p = 0 ; p < INPUT_CHANNELS ; p++){
 						check_read(in, placeholder);
-						conv_buff.shift_up(0);
-						conv_buff.insert_top(placeholder, 0);
+						conv_buff.shift_up(p);
+						conv_buff.insert_top(placeholder, p);
 					}
-			} else if ((i + STRIDE < (INPUT_SIZE - KERNEL_SIZE + 1))
-					&& (j + STRIDE >= (INPUT_SIZE - KERNEL_SIZE + 1)))
-				for (int p = 0 ; p < KERNEL_SIZE * INPUT_CHANNELS ; p++)
-					if (in.empty() == 0) {
-						check_read(in, placeholder);
-						conv_buff.shift_up(0);
-						conv_buff.insert_top(placeholder, 0);
-					}
+				}
+			}
 		}
 	cout << "CONV DONE" << endl;
 }
