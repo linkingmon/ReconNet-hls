@@ -14,7 +14,7 @@ name_ary2 = ['data_type kernel1_bias[64]',
 			'data_type kernel4_bias[64]',
 			'data_type kernel5_bias[32]',
 			'data_type kernel6_bias[1]',]
-for i in range(1,6):
+for i in range(1,7):
 	# read conv weight
 	f = open('model_weights/ReconNet_conv%d.txt' % i)
 	L = f.readlines()
