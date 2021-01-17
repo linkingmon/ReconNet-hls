@@ -3,6 +3,8 @@
 #include "ap_fixed.h"
 #include "weights.h"
 #include <iostream>
+#include  "hls_video.h"
+#include <stdlib.h>
 
 using namespace std;
 
@@ -11,7 +13,8 @@ typedef float data_type;
 
 #define IMAGE_SIZE 33
 #define IMAGE_CHANNELS 1
-
+#define PATCH_COLS 8
+#define PATCH_ROWS 8
 
 void check_read(hls::stream<data_type> &in, data_type& out_val){
     while(true){
@@ -43,8 +46,8 @@ data_type relu(data_type a){
 
 template<int INPUT_SIZE, int INPUT_CHANNELS, int KERNEL_SIZE, int FILTERS, int STRIDE>
 void conv_layer(hls::stream<data_type> &out, hls::stream<data_type> &in,
-		data_type weight[KERNEL_SIZE][KERNEL_SIZE][INPUT_CHANNELS][FILTERS]/*,
-		data_type bias[FILTERS]*/) {
+		data_type weight[KERNEL_SIZE][KERNEL_SIZE][INPUT_CHANNELS][FILTERS],
+		data_type bias[FILTERS]) {
 	int i, j, k, filter;
 	data_type sum, placeholder;
 	int row_offset, col_offset, channel_offset;
@@ -71,7 +74,7 @@ void conv_layer(hls::stream<data_type> &out, hls::stream<data_type> &in,
 				for (row_offset = 0 ; row_offset < KERNEL_SIZE; row_offset++)
 					for (col_offset = 0 ; col_offset < KERNEL_SIZE; col_offset++)
 						for (channel_offset = 0 ; channel_offset < INPUT_CHANNELS ; channel_offset++) {
-							// #pragma HLS pipeline
+							#pragma HLS pipeline
 							int t1, t2;
 							static data_type val1, val2;
 							// t1 = row_offset * INPUT_SIZE * INPUT_CHANNELS;
@@ -85,7 +88,7 @@ void conv_layer(hls::stream<data_type> &out, hls::stream<data_type> &in,
                             // cout << "(" << row_offset << "," << col_offset << "," << channel_offset << "," << filter << ") >> (" << val1 << "," << val2 << ")" << endl;
 						}
                 // cout << sum << endl;
-				out << relu(sum/* + bias[filter]*/);
+				out << relu(sum + bias[filter]);
                 // assert(0);
 			}
 
@@ -134,15 +137,120 @@ void pad_layer(hls::stream<data_type> &out, hls::stream<data_type> &in){
 	cout << "PAD DONE" << endl;
 }
 
-void ReconNet(hls::stream<data_type> &img_in_stream,
-            hls::stream<data_type> &img_out_stream
-         ){
-	#pragma HLS INTERFACE axis port = img_out_stream
-	#pragma HLS INTERFACE axis port = img_in_stream 
-	// #pragma HLS INTERFACE m_axi depth=69120 port = weight
-	#pragma HLS INTERFACE s_axilite port=return bundle=CONTROL
 
-    #pragma dataflow
+template<int W, int IMAGE_ROWS, int IMAGE_COLS, int T, int PATCH_SIZE>
+void myAXIvideo2Mat(hls::stream<ap_axiu<W,1,1,1> >& AXI_video_strm,
+                 hls::stream<data_type> img_in_stream_ary[8])
+{
+    ap_axiu<W,1,1,1> axi;
+    unsigned char pix;
+//     bool sof = 0;
+//  loop_wait_for_start: while (!sof) {
+// #pragma HLS pipeline II=1
+// #pragma HLS loop_tripcount avg=0 max=0
+//         AXI_video_strm >> axi;
+//         sof = axi.user.to_int();
+//     }
+	for (HLS_SIZE_T i = 0; i < PATCH_SIZE*8; i++) {
+        bool eol = 0;
+		for (HLS_SIZE_T j = 0; j < PATCH_SIZE*8; j++) {
+			#pragma HLS loop_flatten off
+			#pragma HLS pipeline II=1
+            // if (sof || eol) {
+            //     sof = 0;
+            //     eol = axi.last.to_int();
+            // } 
+            // else {
+                // If we didn't reach EOL, then read the next pixel
+                // AXI_video_strm >> axi;
+                // eol = axi.last.to_int();
+                // bool user = axi.user.to_int();
+                // if(user) {
+                // }
+            // }
+			if(i >= IMAGE_ROWS || j >= IMAGE_COLS)
+				pix = 0;
+			else{
+				AXI_video_strm >> axi;
+				hls::AXIGetBitFields(axi, 0, 8, pix);
+			}
+			int img_num = j/PATCH_SIZE;
+			data_type out_pix = pix;
+			out_pix = out_pix / 255;
+            int test = pix;
+            img_in_stream_ary[img_num] << out_pix;
+        }
+//    loop_wait_for_eol: while (!eol) {
+//#pragma HLS pipeline II=1
+//#pragma HLS loop_tripcount avg=0 max=0
+//            // Keep reading until we get to EOL
+//            AXI_video_strm >> axi;
+//            eol = axi.last.to_int();
+//        }
+    }
+}
+
+template<int W, int IMAGE_ROWS, int IMAGE_COLS, int T, int PATCH_SIZE>
+void myMat2AXIvideo(hls::stream<ap_axiu<W,1,1,1> >& AXI_video_strm,
+				 hls::stream<data_type> img_out_stream_ary[8])
+{
+    ap_axiu<W,1,1,1> axi;
+    bool sof = 1;
+	for (HLS_SIZE_T i = 0; i < PATCH_SIZE*8; i++) {
+    	for (HLS_SIZE_T j = 0; j < PATCH_SIZE*8; j++) {
+			#pragma HLS loop_flatten off
+			#pragma HLS pipeline II=1
+            if (sof) {
+                axi.user = 1;
+                sof = 0;
+            } else {
+                axi.user = 0;
+            }
+            if (j == (IMAGE_COLS-1) && i == (IMAGE_ROWS-1)) {
+                axi.last = 1;
+            } else {
+                axi.last = 0;
+            }
+			int img_num = j/PATCH_SIZE;
+			data_type in_pix;
+            img_out_stream_ary[img_num] >> in_pix;
+            // cout << in_pix << endl;
+				
+			if(i < IMAGE_ROWS && j < IMAGE_COLS){
+				unsigned char pix = in_pix * 255;
+				axi.data = -1;
+                for(int k = 0 ; k < 3 ; k++)
+				    hls::AXISetBitFields(axi, k*8, 8, pix);
+				axi.keep = -1;
+				AXI_video_strm << axi;
+			}
+        }
+        // assert(0);
+    }
+}
+
+// void select_stream_in(hls::stream<data_type> img_in_stream_ary[PATCH_COLS], hls::stream<data_type> img_in_stream){
+	// data_type pix;
+            // for(int i = 0 ; i < 33*33 ; i++){
+            //         img_in_stream_ary[n_stream] >> pix;
+            //         // cout << pix << endl;
+            //         img_in_stream << pix;
+            // }
+    
+// }
+
+// void select_stream_out(hls::stream<data_type> img_out_stream_ary[PATCH_COLS], hls::stream<data_type> img_out_stream){
+	// data_type pix;
+            // for(int i = 0 ; i < 33*33 ; i++){
+            //         img_out_stream >> pix;
+            //         // cout << pix << endl;
+            //         img_out_stream_ary[n_stream] << pix;
+            // }
+    
+// }
+
+void ReconNet_patch(hls::stream<data_type> img_in_stream_ary[PATCH_COLS], hls::stream<data_type> img_out_stream_ary[PATCH_COLS]){
+	data_type pix;
 
 	hls::stream<data_type> conv1_out;
 	hls::stream<data_type> conv2_out;
@@ -153,17 +261,107 @@ void ReconNet(hls::stream<data_type> &img_in_stream,
 	hls::stream<data_type> conv2_pad_out;
 	hls::stream<data_type> conv3_pad_out;
 	hls::stream<data_type> conv5_pad_out;
+
+    #pragma HLS STREAM variable=conv1_out depth=40
+    #pragma HLS STREAM variable=conv2_out depth=40
+    #pragma HLS STREAM variable=conv3_out depth=40
+    #pragma HLS STREAM variable=conv4_out depth=40
+    #pragma HLS STREAM variable=conv5_out depth=40
+    #pragma HLS STREAM variable=img_pad_out depth=40
+	#pragma HLS STREAM variable=conv2_pad_out depth=40
+	#pragma HLS STREAM variable=conv3_pad_out depth=40
+	#pragma HLS STREAM variable=conv5_pad_out depth=40
+
+	// hls::stream<data_type> img_in_stream;
+	// hls::stream<data_type> img_out_stream;
+    for(int n_stream_row = 0 ; n_stream_row < PATCH_ROWS ; n_stream_row++){
+	    for(int n_stream = 0 ; n_stream < PATCH_COLS ; n_stream++){
+            // for(int i = 0 ; i < 33*33 ; i++){
+            //         img_in_stream_ary[n_stream] >> pix;
+            //         // cout << pix << endl;
+            //         img_in_stream << pix;
+            // }
+        // }
+    // }
+            // show_stream(img_in_stream,33, 1);
+	        // assert(0);
+            // #pragma dataflow
+            pad_layer<5,1>(img_pad_out, img_in_stream_ary[n_stream]);
+            conv_layer<43, 1, 11, 64, 1>(conv1_out, img_pad_out, kernel1_weight, kernel1_bias);
+            conv_layer<33, 64, 1, 32, 1>(conv2_out, conv1_out, kernel2_weight, kernel2_bias);
+            pad_layer<3,32>(conv2_pad_out, conv2_out);
+            conv_layer<39, 32, 7, 1, 1>(conv3_out, conv2_pad_out, kernel3_weight, kernel3_bias);
+            pad_layer<5,1>(conv3_pad_out, conv3_out);
+            conv_layer<43, 1, 11, 64, 1>(conv4_out, conv3_pad_out, kernel4_weight, kernel4_bias);
+            conv_layer<33, 64, 1, 32, 1>(conv5_out, conv4_out, kernel5_weight, kernel5_bias);
+            pad_layer<3,32>(conv5_pad_out, conv5_out);
+            conv_layer<39, 32, 7, 1, 1>(img_out_stream_ary[n_stream], conv5_pad_out, kernel6_weight, kernel6_bias);
+            // show_stream(img_out_stream,33, 1);
+            // assert(0);
+
+    // for(int n_stream_row = 0 ; n_stream_row < 8 ; n_stream_row++){
+        // for(int n_stream = 0 ; n_stream < 8 ; n_stream++){
+            // for(int i = 0 ; i < 33*33 ; i++){
+            //         img_out_stream >> pix;
+            //         // cout << pix << endl;
+            //         img_out_stream_ary[n_stream] << pix;
+            // }
+            // assert(0);
+            cout << "PATCH (" << n_stream_row << "," << n_stream << ") DONE\n";
+        }
+    }
+
+}
+
+void ReconNet(hls::stream<ap_axiu<32,1,1,1> >& AXI_video_stream_in,
+            hls::stream<ap_axiu<32,1,1,1> >& AXI_video_stream_out
+         ){
+// void ReconNet(hls::stream<data_type> &img_in_stream,
+//             hls::stream<data_type> &img_out_stream
+//          ){
+// 	#pragma HLS INTERFACE axis port = img_out_stream
+	// #pragma HLS INTERFACE axis port = img_in_stream 
+    #pragma HLS INTERFACE axis port=AXI_video_stream_in bundle=VIDEO_IN
+    #pragma HLS INTERFACE axis port=AXI_video_stream_out bundle=VIDEO_OUT
+	#pragma HLS INTERFACE s_axilite port=return bundle=CONTROL
+
+    #pragma dataflow
+	
+    hls::stream<data_type> img_in_stream_ary[PATCH_COLS];
+	hls::stream<data_type> img_out_stream_ary[PATCH_COLS];
     
+    #pragma HLS STREAM variable=img_in_stream_ary[0] depth=40
+    #pragma HLS STREAM variable=img_in_stream_ary[1] depth=40
+    #pragma HLS STREAM variable=img_in_stream_ary[2] depth=40
+    #pragma HLS STREAM variable=img_in_stream_ary[3] depth=40
+    #pragma HLS STREAM variable=img_in_stream_ary[4] depth=40
+    #pragma HLS STREAM variable=img_in_stream_ary[5] depth=40
+    #pragma HLS STREAM variable=img_in_stream_ary[6] depth=40
+    #pragma HLS STREAM variable=img_in_stream_ary[7] depth=40
+    #pragma HLS STREAM variable=img_out_stream_ary[0] depth=40
+    #pragma HLS STREAM variable=img_out_stream_ary[1] depth=40
+    #pragma HLS STREAM variable=img_out_stream_ary[2] depth=40
+    #pragma HLS STREAM variable=img_out_stream_ary[3] depth=40
+    #pragma HLS STREAM variable=img_out_stream_ary[4] depth=40
+    #pragma HLS STREAM variable=img_out_stream_ary[5] depth=40
+    #pragma HLS STREAM variable=img_out_stream_ary[6] depth=40
+    #pragma HLS STREAM variable=img_out_stream_ary[7] depth=40
+
     // Start image streaming
 	// template<int INPUT_SIZE, int INPUT_CHANNELS, int KERNEL_SIZE, int FILTERS, int STRIDE>
-	pad_layer<5,1>(img_pad_out, img_in_stream);
-	conv_layer<43, 1, 11, 64, 1>(conv1_out, img_pad_out, kernel1_weight/*, kernel1_bias*/);
-	conv_layer<33, 64, 1, 32, 1>(conv2_out, conv1_out, kernel2_weight/*, kernel2_bias*/);
-	pad_layer<3,32>(conv2_pad_out, conv2_out);
-	conv_layer<39, 32, 7, 1, 1>(conv3_out, conv2_pad_out, kernel3_weight/*, kernel3_bias*/);
-	pad_layer<5,1>(conv3_pad_out, conv3_out);
-	conv_layer<43, 1, 11, 64, 1>(conv4_out, conv3_pad_out, kernel4_weight/*, kernel4_bias*/);
-	conv_layer<33, 64, 1, 32, 1>(conv5_out, conv4_out, kernel5_weight/*, kernel5_bias*/);
-	pad_layer<3,32>(conv5_pad_out, conv5_out);
-	conv_layer<39, 32, 7, 1, 1>(img_out_stream, conv5_pad_out, kernel6_weight/*, kernel6_bias*/);
+	// hls::Mat<33, 33, HLS_8UC1> img_test;
+	myAXIvideo2Mat<32,256,256,HLS_8UC1,33>(AXI_video_stream_in, img_in_stream_ary);
+
+    ReconNet_patch(img_in_stream_ary, img_out_stream_ary);
+	// int tp;
+	// for(int n_pixel = 0 ; n_pixel < 34; n_pixel++){
+	// 	img_in_stream[0] >> pix;
+	// 	for(int i = 0 ; i < 3 ; i++){
+	// 		// tp = pixel.val[i];
+	// 		cout << pix << ", ";
+	// 	}
+	// 	cout << '\n';
+	// }
+	
+	myMat2AXIvideo<32,256,256,HLS_8UC1,33>(AXI_video_stream_out, img_out_stream_ary);
 }
