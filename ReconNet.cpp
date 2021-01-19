@@ -9,27 +9,46 @@
 using namespace std;
 
 // typedef ap_fixed<16, 4> data_type;
-typedef float data_type;
+typedef half data_type;
 
-#define IMAGE_SIZE 33
-#define IMAGE_CHANNELS 1
+// #define IMAGE_SIZE 33
+// #define IMAGE_CHANNELS 1
+// #define VIDEO_COLS 1920
+// #define VIDEO_ROWS 1080
+#define VIDEO_COLS 256
+#define VIDEO_ROWS 256
+#define WORD_LEN 32
+#define PATCH_SIZES 33
 #define PATCH_COLS 8
 #define PATCH_ROWS 8
+// #define PATCH_SIZES 16
+// #define PATCH_COLS 16
+// #define PATCH_ROWS 16
+// typedef ap_axiu<32,1,1,1> STREAM_IN_TYPE;
+
+class half_axi{
+	public:
+	data_type data;
+	bool last;
+	bool user;
+};
+
+typedef half_axi STREAM_IN_TYPE;
 
 void check_read(hls::stream<data_type> &in, data_type& out_val){
-    while(true){
-        if(in.empty() == 0){
+    // while(true){
+    //     if(in.empty() == 0){
             in >> out_val;
-            break;
-        }
-    }
+    //         break;
+    //     }
+    // }
 }
 
 void show_stream(hls::stream<data_type> &in, int size, int channel){
 	for(int x = 0 ; x < size ; x++){
 		for(int y = 0 ; y < size ; y++){
 			for(int n_channel = 0 ; n_channel < channel ; n_channel++){
-				float temp;
+				data_type temp;
 				check_read(in, temp);
 				cout << temp << " ";
 			}
@@ -74,7 +93,7 @@ void conv_layer(hls::stream<data_type> &out, hls::stream<data_type> &in,
 				for (row_offset = 0 ; row_offset < KERNEL_SIZE; row_offset++)
 					for (col_offset = 0 ; col_offset < KERNEL_SIZE; col_offset++)
 						for (channel_offset = 0 ; channel_offset < INPUT_CHANNELS ; channel_offset++) {
-							#pragma HLS pipeline
+							#pragma HLS pipeline II=1
 							int t1, t2;
 							static data_type val1, val2;
 							// t1 = row_offset * INPUT_SIZE * INPUT_CHANNELS;
@@ -120,13 +139,13 @@ void conv_layer(hls::stream<data_type> &out, hls::stream<data_type> &in,
 	cout << "CONV DONE" << endl;
 }
 
-template<int PAD_SIZE, int CHANNELS>
+template<int PAD_SIZE, int CHANNELS, int PATCH_SIZE>
 void pad_layer(hls::stream<data_type> &out, hls::stream<data_type> &in){
-	for(int x = -PAD_SIZE ; x < IMAGE_SIZE+PAD_SIZE ; x++){
-		for(int y = -PAD_SIZE ; y < IMAGE_SIZE+PAD_SIZE ; y++){
+	for(int x = -PAD_SIZE ; x < PATCH_SIZE+PAD_SIZE ; x++){
+		for(int y = -PAD_SIZE ; y < PATCH_SIZE+PAD_SIZE ; y++){
 			for(int n_channel = 0 ; n_channel < CHANNELS ; n_channel++){
 				data_type temp;
-				if(x < 0 || x >= IMAGE_SIZE || y < 0 || y >= IMAGE_SIZE)
+				if(x < 0 || x >= PATCH_SIZE || y < 0 || y >= PATCH_SIZE)
 					temp = (data_type)0;
 				else
 					check_read(in, temp);
@@ -139,10 +158,10 @@ void pad_layer(hls::stream<data_type> &out, hls::stream<data_type> &in){
 
 
 template<int W, int IMAGE_ROWS, int IMAGE_COLS, int T, int PATCH_SIZE>
-void myAXIvideo2Mat(hls::stream<ap_axiu<W,1,1,1> >& AXI_video_strm,
+void myAXIvideo2Mat(hls::stream<STREAM_IN_TYPE >& AXI_video_strm,
                  hls::stream<data_type> img_in_stream_ary[8])
 {
-    ap_axiu<W,1,1,1> axi;
+    STREAM_IN_TYPE axi;
     unsigned char pix;
 //     bool sof = 0;
 //  loop_wait_for_start: while (!sof) {
@@ -151,9 +170,9 @@ void myAXIvideo2Mat(hls::stream<ap_axiu<W,1,1,1> >& AXI_video_strm,
 //         AXI_video_strm >> axi;
 //         sof = axi.user.to_int();
 //     }
-	for (HLS_SIZE_T i = 0; i < PATCH_SIZE*8; i++) {
+	for (HLS_SIZE_T i = 0; i < PATCH_SIZE*PATCH_COLS; i++) {
         bool eol = 0;
-		for (HLS_SIZE_T j = 0; j < PATCH_SIZE*8; j++) {
+		for (HLS_SIZE_T j = 0; j < PATCH_SIZE*PATCH_ROWS; j++) {
 			#pragma HLS loop_flatten off
 			#pragma HLS pipeline II=1
             // if (sof || eol) {
@@ -172,10 +191,12 @@ void myAXIvideo2Mat(hls::stream<ap_axiu<W,1,1,1> >& AXI_video_strm,
 				pix = 0;
 			else{
 				AXI_video_strm >> axi;
-				hls::AXIGetBitFields(axi, 0, 8, pix);
+				pix = axi.data;
+				// hls::AXIGetBitFields(axi, 0, 8, pix);
 			}
 			int img_num = j/PATCH_SIZE;
 			data_type out_pix = pix;
+			// out_pix = out_pix / 255;
 			out_pix = out_pix / 255;
             int test = pix;
             img_in_stream_ary[img_num] << out_pix;
@@ -191,13 +212,13 @@ void myAXIvideo2Mat(hls::stream<ap_axiu<W,1,1,1> >& AXI_video_strm,
 }
 
 template<int W, int IMAGE_ROWS, int IMAGE_COLS, int T, int PATCH_SIZE>
-void myMat2AXIvideo(hls::stream<ap_axiu<W,1,1,1> >& AXI_video_strm,
+void myMat2AXIvideo(hls::stream<STREAM_IN_TYPE >& AXI_video_strm,
 				 hls::stream<data_type> img_out_stream_ary[8])
 {
-    ap_axiu<W,1,1,1> axi;
+    STREAM_IN_TYPE axi;
     bool sof = 1;
-	for (HLS_SIZE_T i = 0; i < PATCH_SIZE*8; i++) {
-    	for (HLS_SIZE_T j = 0; j < PATCH_SIZE*8; j++) {
+	for (HLS_SIZE_T i = 0; i < PATCH_SIZE*PATCH_COLS; i++) {
+    	for (HLS_SIZE_T j = 0; j < PATCH_SIZE*PATCH_ROWS; j++) {
 			#pragma HLS loop_flatten off
 			#pragma HLS pipeline II=1
             if (sof) {
@@ -218,10 +239,10 @@ void myMat2AXIvideo(hls::stream<ap_axiu<W,1,1,1> >& AXI_video_strm,
 				
 			if(i < IMAGE_ROWS && j < IMAGE_COLS){
 				unsigned char pix = in_pix * 255;
-				axi.data = -1;
-                for(int k = 0 ; k < 3 ; k++)
-				    hls::AXISetBitFields(axi, k*8, 8, pix);
-				axi.keep = -1;
+				axi.data = pix;
+                // for(int k = 0 ; k < 3 ; k++)
+				//     hls::AXISetBitFields(axi, k*8, 8, pix);
+				// axi.keep = -1;
 				AXI_video_strm << axi;
 			}
         }
@@ -286,25 +307,26 @@ void ReconNet_patch(hls::stream<data_type> img_in_stream_ary[PATCH_COLS], hls::s
             // show_stream(img_in_stream,33, 1);
 	        // assert(0);
             // #pragma dataflow
-            pad_layer<5,1>(img_pad_out, img_in_stream_ary[n_stream]);
-            conv_layer<43, 1, 11, 64, 1>(conv1_out, img_pad_out, kernel1_weight, kernel1_bias);
-            conv_layer<33, 64, 1, 32, 1>(conv2_out, conv1_out, kernel2_weight, kernel2_bias);
-            pad_layer<3,32>(conv2_pad_out, conv2_out);
-            conv_layer<39, 32, 7, 1, 1>(conv3_out, conv2_pad_out, kernel3_weight, kernel3_bias);
-            pad_layer<5,1>(conv3_pad_out, conv3_out);
-            conv_layer<43, 1, 11, 64, 1>(conv4_out, conv3_pad_out, kernel4_weight, kernel4_bias);
-            conv_layer<33, 64, 1, 32, 1>(conv5_out, conv4_out, kernel5_weight, kernel5_bias);
-            pad_layer<3,32>(conv5_pad_out, conv5_out);
-            conv_layer<39, 32, 7, 1, 1>(img_out_stream_ary[n_stream], conv5_pad_out, kernel6_weight, kernel6_bias);
+			// template<int INPUT_SIZE, int INPUT_CHANNELS, int KERNEL_SIZE, int FILTERS, int STRIDE>
+            pad_layer<5,1,PATCH_SIZES>(img_pad_out, img_in_stream_ary[n_stream]);
+            conv_layer<PATCH_SIZES+10, 1, 11, 64, 1>(conv1_out, img_pad_out, kernel1_weight, kernel1_bias);
+            conv_layer<PATCH_SIZES, 64, 1, 32, 1>(conv2_out, conv1_out, kernel2_weight, kernel2_bias);
+            pad_layer<3,32,PATCH_SIZES>(conv2_pad_out, conv2_out);
+            conv_layer<PATCH_SIZES+6, 32, 7, 1, 1>(conv3_out, conv2_pad_out, kernel3_weight, kernel3_bias);
+            pad_layer<5,1,PATCH_SIZES>(conv3_pad_out, conv3_out);
+            conv_layer<PATCH_SIZES+10, 1, 11, 64, 1>(conv4_out, conv3_pad_out, kernel4_weight, kernel4_bias);
+            conv_layer<PATCH_SIZES, 64, 1, 32, 1>(conv5_out, conv4_out, kernel5_weight, kernel5_bias);
+            pad_layer<3,32,PATCH_SIZES>(conv5_pad_out, conv5_out);
+            conv_layer<PATCH_SIZES+6, 32, 7, 1, 1>(img_out_stream_ary[n_stream], conv5_pad_out, kernel6_weight, kernel6_bias);
             // show_stream(img_out_stream,33, 1);
             // assert(0);
 
     // for(int n_stream_row = 0 ; n_stream_row < 8 ; n_stream_row++){
         // for(int n_stream = 0 ; n_stream < 8 ; n_stream++){
             // for(int i = 0 ; i < 33*33 ; i++){
-            //         img_out_stream >> pix;
-            //         // cout << pix << endl;
-            //         img_out_stream_ary[n_stream] << pix;
+            //         img_out_stream_ary[n_stream] >> pix;
+            //         cout << pix << endl;
+            //         // img_out_stream_ary[n_stream] << pix;
             // }
             // assert(0);
             cout << "PATCH (" << n_stream_row << "," << n_stream << ") DONE\n";
@@ -313,8 +335,8 @@ void ReconNet_patch(hls::stream<data_type> img_in_stream_ary[PATCH_COLS], hls::s
 
 }
 
-void ReconNet(hls::stream<ap_axiu<32,1,1,1> >& AXI_video_stream_in,
-            hls::stream<ap_axiu<32,1,1,1> >& AXI_video_stream_out
+void ReconNet(hls::stream<STREAM_IN_TYPE>& AXI_video_stream_in,
+            hls::stream<STREAM_IN_TYPE >& AXI_video_stream_out
          ){
 // void ReconNet(hls::stream<data_type> &img_in_stream,
 //             hls::stream<data_type> &img_out_stream
@@ -350,7 +372,7 @@ void ReconNet(hls::stream<ap_axiu<32,1,1,1> >& AXI_video_stream_in,
     // Start image streaming
 	// template<int INPUT_SIZE, int INPUT_CHANNELS, int KERNEL_SIZE, int FILTERS, int STRIDE>
 	// hls::Mat<33, 33, HLS_8UC1> img_test;
-	myAXIvideo2Mat<32,256,256,HLS_8UC1,33>(AXI_video_stream_in, img_in_stream_ary);
+	myAXIvideo2Mat<WORD_LEN,VIDEO_ROWS,VIDEO_COLS,HLS_8UC1,PATCH_SIZES>(AXI_video_stream_in, img_in_stream_ary);
 
     ReconNet_patch(img_in_stream_ary, img_out_stream_ary);
 	// int tp;
@@ -363,5 +385,5 @@ void ReconNet(hls::stream<ap_axiu<32,1,1,1> >& AXI_video_stream_in,
 	// 	cout << '\n';
 	// }
 	
-	myMat2AXIvideo<32,256,256,HLS_8UC1,33>(AXI_video_stream_out, img_out_stream_ary);
+	myMat2AXIvideo<WORD_LEN,VIDEO_ROWS,VIDEO_COLS,HLS_8UC1,PATCH_SIZES>(AXI_video_stream_out, img_out_stream_ary);
 }
