@@ -161,23 +161,13 @@ void pad_layer(hls::stream<data_type> &out, hls::stream<data_type> &in){
 	cout << "PAD DONE" << endl;
 }
 
-
-template<int W, int IMAGE_ROWS, int IMAGE_COLS, int T, int PATCH_SIZE>
-void myAXIvideo2Mat(hls::stream<ap_axiu<W,1,1,1> >& AXI_video_strm,
-                 hls::stream<data_type> img_in_stream_ary[8])
+template<int IMAGE_ROWS, int IMAGE_COLS, int PATCH_SIZE>
+void pad_image(hls::stream<data_type> &img_in_stream,
+                 hls::stream<data_type>img_in_stream_ary[8])
 {
-    ap_axiu<W,1,1,1> axi;
-    unsigned char pix;
-//     bool sof = 0;
-//  loop_wait_for_start: while (!sof) {
-// #pragma HLS pipeline II=1
-// #pragma HLS loop_tripcount avg=0 max=0
-//         AXI_video_strm >> axi;
-//         sof = axi.user.to_int();
-//     }
-	for (HLS_SIZE_T i = 0; i < PATCH_SIZE*8; i++) {
-        bool eol = 0;
-		for (HLS_SIZE_T j = 0; j < PATCH_SIZE*8; j++) {
+	for (int i = 0; i < PATCH_SIZE*8; i++) {
+        // bool eol = 0;
+		for (int j = 0; j < PATCH_SIZE*8; j++) {
 			#pragma HLS loop_flatten off
 			#pragma HLS pipeline II=1
             // if (sof || eol) {
@@ -192,17 +182,16 @@ void myAXIvideo2Mat(hls::stream<ap_axiu<W,1,1,1> >& AXI_video_strm,
                 // if(user) {
                 // }
             // }
+			data_type pix;
 			if(i >= IMAGE_ROWS || j >= IMAGE_COLS)
 				pix = 0;
 			else{
-				AXI_video_strm >> axi;
-				hls::AXIGetBitFields(axi, 0, 8, pix);
+				// check_read(img_in_stream,pix);
+				img_in_stream >> pix;
 			}
 			int img_num = j/PATCH_SIZE;
-			data_type out_pix = pix;
-			out_pix = out_pix / 255;
-            int test = pix;
-            img_in_stream_ary[img_num] << out_pix;
+			pix = pix / 255;
+            img_in_stream_ary[img_num] << pix;
         }
 //    loop_wait_for_eol: while (!eol) {
 //#pragma HLS pipeline II=1
@@ -213,45 +202,131 @@ void myAXIvideo2Mat(hls::stream<ap_axiu<W,1,1,1> >& AXI_video_strm,
 //        }
     }
 }
-
-template<int W, int IMAGE_ROWS, int IMAGE_COLS, int T, int PATCH_SIZE>
-void myMat2AXIvideo(hls::stream<ap_axiu<W,1,1,1> >& AXI_video_strm,
-				 hls::stream<data_type> img_out_stream_ary[8])
+// template<int W, int IMAGE_ROWS, int IMAGE_COLS, int T, int PATCH_SIZE>
+// void myAXIvideo2Mat(hls::stream<ap_axiu<W,1,1,1> >& AXI_video_strm,
+//                  hls::stream<data_type> img_in_stream_ary[8])
+// {
+//     ap_axiu<W,1,1,1> axi;
+//     unsigned char pix;
+// //     bool sof = 0;
+// //  loop_wait_for_start: while (!sof) {
+// // #pragma HLS pipeline II=1
+// // #pragma HLS loop_tripcount avg=0 max=0
+// //         AXI_video_strm >> axi;
+// //         sof = axi.user.to_int();
+// //     }
+// 	for (HLS_SIZE_T i = 0; i < PATCH_SIZE*8; i++) {
+//         bool eol = 0;
+// 		for (HLS_SIZE_T j = 0; j < PATCH_SIZE*8; j++) {
+// 			#pragma HLS loop_flatten off
+// 			#pragma HLS pipeline II=1
+//             // if (sof || eol) {
+//             //     sof = 0;
+//             //     eol = axi.last.to_int();
+//             // } 
+//             // else {
+//                 // If we didn't reach EOL, then read the next pixel
+//                 // AXI_video_strm >> axi;
+//                 // eol = axi.last.to_int();
+//                 // bool user = axi.user.to_int();
+//                 // if(user) {
+//                 // }
+//             // }
+// 			if(i >= IMAGE_ROWS || j >= IMAGE_COLS)
+// 				pix = 0;
+// 			else{
+// 				AXI_video_strm >> axi;
+// 				hls::AXIGetBitFields(axi, 0, 8, pix);
+// 			}
+// 			int img_num = j/PATCH_SIZE;
+// 			data_type out_pix = pix;
+// 			out_pix = out_pix / 255;
+//             int test = pix;
+//             img_in_stream_ary[img_num] << out_pix;
+//         }
+// //    loop_wait_for_eol: while (!eol) {
+// //#pragma HLS pipeline II=1
+// //#pragma HLS loop_tripcount avg=0 max=0
+// //            // Keep reading until we get to EOL
+// //            AXI_video_strm >> axi;
+// //            eol = axi.last.to_int();
+// //        }
+//     }
+// }
+template<int IMAGE_ROWS, int IMAGE_COLS, int PATCH_SIZE>
+void image_out(hls::stream<data_type> &img_out_stream,
+                 hls::stream<data_type>img_out_stream_ary[8])
 {
-    ap_axiu<W,1,1,1> axi;
-    bool sof = 1;
-	for (HLS_SIZE_T i = 0; i < PATCH_SIZE*8; i++) {
-    	for (HLS_SIZE_T j = 0; j < PATCH_SIZE*8; j++) {
+	for (int i = 0; i < PATCH_SIZE*8; i++) {
+        // bool eol = 0;
+		for (int j = 0; j < PATCH_SIZE*8; j++) {
 			#pragma HLS loop_flatten off
 			#pragma HLS pipeline II=1
-            if (sof) {
-                axi.user = 1;
-                sof = 0;
-            } else {
-                axi.user = 0;
-            }
-            if (j == (IMAGE_COLS-1) && i == (IMAGE_ROWS-1)) {
-                axi.last = 1;
-            } else {
-                axi.last = 0;
-            }
+            // if (sof || eol) {
+            //     sof = 0;
+            //     eol = axi.last.to_int();
+            // } 
+            // else {
+                // If we didn't reach EOL, then read the next pixel
+                // AXI_video_strm >> axi;
+                // eol = axi.last.to_int();
+                // bool user = axi.user.to_int();
+                // if(user) {
+                // }
+            // }
 			int img_num = j/PATCH_SIZE;
-			data_type in_pix;
-            img_out_stream_ary[img_num] >> in_pix;
-            // cout << in_pix << endl;
-				
-			if(i < IMAGE_ROWS && j < IMAGE_COLS){
-				unsigned char pix = in_pix * 255;
-				axi.data = -1;
-                for(int k = 0 ; k < 3 ; k++)
-				    hls::AXISetBitFields(axi, k*8, 8, pix);
-				axi.keep = -1;
-				AXI_video_strm << axi;
-			}
+			data_type pix;
+			img_out_stream_ary[img_num] >> pix;
+			if(i < IMAGE_ROWS && j < IMAGE_COLS)
+				img_out_stream << pix;
         }
-        // assert(0);
+//    loop_wait_for_eol: while (!eol) {
+//#pragma HLS pipeline II=1
+//#pragma HLS loop_tripcount avg=0 max=0
+//            // Keep reading until we get to EOL
+//            AXI_video_strm >> axi;
+//            eol = axi.last.to_int();
+//        }
     }
 }
+// template<int W, int IMAGE_ROWS, int IMAGE_COLS, int T, int PATCH_SIZE>
+// void myMat2AXIvideo(hls::stream<ap_axiu<W,1,1,1> >& AXI_video_strm,
+// 				 hls::stream<data_type> img_out_stream_ary[8])
+// {
+//     ap_axiu<W,1,1,1> axi;
+//     bool sof = 1;
+// 	for (HLS_SIZE_T i = 0; i < PATCH_SIZE*8; i++) {
+//     	for (HLS_SIZE_T j = 0; j < PATCH_SIZE*8; j++) {
+// 			#pragma HLS loop_flatten off
+// 			#pragma HLS pipeline II=1
+//             if (sof) {
+//                 axi.user = 1;
+//                 sof = 0;
+//             } else {
+//                 axi.user = 0;
+//             }
+//             if (j == (IMAGE_COLS-1) && i == (IMAGE_ROWS-1)) {
+//                 axi.last = 1;
+//             } else {
+//                 axi.last = 0;
+//             }
+// 			int img_num = j/PATCH_SIZE;
+// 			data_type in_pix;
+//             img_out_stream_ary[img_num] >> in_pix;
+//             // cout << in_pix << endl;
+				
+// 			if(i < IMAGE_ROWS && j < IMAGE_COLS){
+// 				unsigned char pix = in_pix * 255;
+// 				axi.data = -1;
+//                 for(int k = 0 ; k < 3 ; k++)
+// 				    hls::AXISetBitFields(axi, k*8, 8, pix);
+// 				axi.keep = -1;
+// 				AXI_video_strm << axi;
+// 			}
+//         }
+//         // assert(0);
+//     }
+// }
 
 // void select_stream_in(hls::stream<data_type> img_in_stream_ary[PATCH_COLS], hls::stream<data_type> img_in_stream){
 	// data_type pix;
@@ -274,17 +349,17 @@ void myMat2AXIvideo(hls::stream<ap_axiu<W,1,1,1> >& AXI_video_strm,
 // }
 
 void ReconNet_patch(hls::stream<data_type> img_in_stream_ary[PATCH_COLS], hls::stream<data_type> img_out_stream_ary[PATCH_COLS]){
-	data_type pix;
+	// data_type pix;
 
-	hls::stream<data_type> conv1_out;
-	hls::stream<data_type> conv2_out;
-	hls::stream<data_type> conv3_out;
-	hls::stream<data_type> conv4_out;
-	hls::stream<data_type> conv5_out;
-    hls::stream<data_type> img_pad_out;
-	hls::stream<data_type> conv2_pad_out;
-	hls::stream<data_type> conv3_pad_out;
-	hls::stream<data_type> conv5_pad_out;
+	hls::stream<data_type> conv1_out("conv1_out");
+	hls::stream<data_type> conv2_out("conv2_out");
+	hls::stream<data_type> conv3_out("conv3_out");
+	hls::stream<data_type> conv4_out("conv4_out");
+	hls::stream<data_type> conv5_out("conv5_out");
+    hls::stream<data_type> img_pad_out("img_pad_out");
+	hls::stream<data_type> conv2_pad_out("conv2_pad_out");
+	hls::stream<data_type> conv3_pad_out("conv3_pad_out");
+	hls::stream<data_type> conv5_pad_out("conv5_pad_out");
 
     #pragma HLS STREAM variable=conv1_out depth=40
     #pragma HLS STREAM variable=conv2_out depth=40
@@ -309,7 +384,7 @@ void ReconNet_patch(hls::stream<data_type> img_in_stream_ary[PATCH_COLS], hls::s
     // }
             // show_stream(img_in_stream,33, 1);
 	        // assert(0);
-            // #pragma dataflow
+            #pragma dataflow
             pad_layer<5,1>(img_pad_out, img_in_stream_ary[n_stream]);
             conv_layer<43, 1, 11, 64, 1>(conv1_out, img_pad_out, kernel1_weight, kernel1_bias);
             conv_layer<33, 64, 1, 32, 1>(conv2_out, conv1_out, kernel2_weight, kernel2_bias);
@@ -320,7 +395,7 @@ void ReconNet_patch(hls::stream<data_type> img_in_stream_ary[PATCH_COLS], hls::s
             conv_layer<33, 64, 1, 32, 1>(conv5_out, conv4_out, kernel5_weight, kernel5_bias);
             pad_layer<3,32>(conv5_pad_out, conv5_out);
             conv_layer<39, 32, 7, 1, 1>(img_out_stream_ary[n_stream], conv5_pad_out, kernel6_weight, kernel6_bias);
-            // show_stream(img_out_stream,33, 1);
+            // show_stream(img_out_stream_ary[n_stream],33, 1);
             // assert(0);
 
     // for(int n_stream_row = 0 ; n_stream_row < 8 ; n_stream_row++){
@@ -337,20 +412,18 @@ void ReconNet_patch(hls::stream<data_type> img_in_stream_ary[PATCH_COLS], hls::s
 
 }
 
-void ReconNet(hls::stream<ap_axiu<32,1,1,1> >& AXI_video_stream_in,
-            hls::stream<ap_axiu<32,1,1,1> >& AXI_video_stream_out
-         ){
-// void ReconNet(hls::stream<data_type> &img_in_stream,
-//             hls::stream<data_type> &img_out_stream
+// void ReconNet(hls::stream<ap_axiu<32,1,1,1> >& AXI_video_stream_in,
+//             hls::stream<ap_axiu<32,1,1,1> >& AXI_video_stream_out
 //          ){
-// 	#pragma HLS INTERFACE axis port = img_out_stream
-	// #pragma HLS INTERFACE axis port = img_in_stream 
-    #pragma HLS INTERFACE axis port=AXI_video_stream_in bundle=VIDEO_IN
-    #pragma HLS INTERFACE axis port=AXI_video_stream_out bundle=VIDEO_OUT
+void ReconNet(hls::stream<data_type> &img_in_stream,
+            hls::stream<data_type> &img_out_stream
+         ){
+	#pragma HLS INTERFACE axis port = img_out_stream
+	#pragma HLS INTERFACE axis port = img_in_stream
+    // #pragma HLS INTERFACE axis port=AXI_video_stream_in bundle=VIDEO_IN
+    // #pragma HLS INTERFACE axis port=AXI_video_stream_out bundle=VIDEO_OUT
 	#pragma HLS INTERFACE s_axilite port=return bundle=CONTROL
-
     #pragma dataflow
-	
     hls::stream<data_type> img_in_stream_ary[PATCH_COLS];
 	hls::stream<data_type> img_out_stream_ary[PATCH_COLS];
     
@@ -374,9 +447,14 @@ void ReconNet(hls::stream<ap_axiu<32,1,1,1> >& AXI_video_stream_in,
     // Start image streaming
 	// template<int INPUT_SIZE, int INPUT_CHANNELS, int KERNEL_SIZE, int FILTERS, int STRIDE>
 	// hls::Mat<33, 33, HLS_8UC1> img_test;
-	myAXIvideo2Mat<32,256,256,HLS_8UC1,33>(AXI_video_stream_in, img_in_stream_ary);
+	// myAXIvideo2Mat<32,256,256,HLS_8UC1,33>(AXI_video_stream_in, img_in_stream_ary);
+
+	pad_image<256,256,33>(img_in_stream, img_in_stream_ary);
+
+
 
     ReconNet_patch(img_in_stream_ary, img_out_stream_ary);
+	image_out<256,256,33>(img_out_stream, img_out_stream_ary);
 	// int tp;
 	// for(int n_pixel = 0 ; n_pixel < 34; n_pixel++){
 	// 	img_in_stream[0] >> pix;
@@ -387,5 +465,5 @@ void ReconNet(hls::stream<ap_axiu<32,1,1,1> >& AXI_video_stream_in,
 	// 	cout << '\n';
 	// }
 	
-	myMat2AXIvideo<32,256,256,HLS_8UC1,33>(AXI_video_stream_out, img_out_stream_ary);
+	// myMat2AXIvideo<32,256,256,HLS_8UC1,33>(AXI_video_stream_out, img_out_stream_ary);
 }
