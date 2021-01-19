@@ -5,10 +5,12 @@
 #include "hls_opencv.h"
 
 #include "ap_fixed.h"
+#include "hls_half.h"
+typedef half data_type;
 using namespace std;
 
 // typedef ap_fixed<16, 4> data_type;
-typedef float data_type;
+// typedef float data_type;
 
 
 #define IMAGE_SIZE 33

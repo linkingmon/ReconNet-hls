@@ -5,11 +5,12 @@
 #include <iostream>
 #include  "hls_video.h"
 #include <stdlib.h>
-
+#include "hls_half.h"
+typedef half data_type;
 using namespace std;
 
 // typedef ap_fixed<16, 4> data_type;
-typedef float data_type;
+// typedef float data_type;
 
 #define IMAGE_SIZE 33
 #define IMAGE_CHANNELS 1
@@ -17,19 +18,20 @@ typedef float data_type;
 #define PATCH_ROWS 8
 
 void check_read(hls::stream<data_type> &in, data_type& out_val){
-    while(true){
-        if(in.empty() == 0){
-            in >> out_val;
-            break;
-        }
-    }
+    // while(true){
+    //     if(in.empty() == 0){
+    //         in >> out_val;
+    //         break;
+    //     }
+    // }
+	in >> out_val;
 }
 
 void show_stream(hls::stream<data_type> &in, int size, int channel){
 	for(int x = 0 ; x < size ; x++){
 		for(int y = 0 ; y < size ; y++){
 			for(int n_channel = 0 ; n_channel < channel ; n_channel++){
-				float temp;
+				data_type temp;
 				check_read(in, temp);
 				cout << temp << " ";
 			}
@@ -38,7 +40,29 @@ void show_stream(hls::stream<data_type> &in, int size, int channel){
 	}
 	assert(0);
 }
-
+void show_weight(data_type a[][11][1][64], int first, int second, int third, int fourth){
+	cout<< "come in show_weight function!!!!!!!!"<<endl;
+	cout.precision(17);
+	for(int i = 0 ; i < first ; i++){
+		for(int j = 0 ; j < second ; j++){
+			for(int k = 0; k < third; k++){
+				for(int l = 0; l < fourth; l++){
+					cout<<a[i][j][k][l]<<endl;
+				}
+			}
+			cout << '\n';
+		}
+	}
+	assert(0);
+}
+void show_bias(data_type a[], int first){
+	cout<< "come in show_bias function!!!!!!!!"<<endl;
+	// cout.precision(17);
+	for(int i = 0 ; i < first ; i++){
+		cout<< a[i]<<endl;
+	}
+	assert(0);
+}
 data_type relu(data_type a){
     #pragma HLS inline
 	return a > (data_type)0 ? a : (data_type)0;
