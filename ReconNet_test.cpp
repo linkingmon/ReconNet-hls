@@ -70,10 +70,10 @@ int main()
     ReconNet(src_axi, dst_axi);
     cout << "Done Kernel " << endl;
 
-	// AXIvideo2IplImage(dst_axi, dst);
-	// cvSaveImage(OUTPUT_IMAGE, dst);
-	// cvReleaseImage(&src);
-	// cvReleaseImage(&dst);
+	AXIvideo2IplImage(dst_axi, dst);
+	cvSaveImage(OUTPUT_IMAGE, dst);
+	cvReleaseImage(&src);
+	cvReleaseImage(&dst);
 
     // char tempbuf[2000];
     // sprintf(tempbuf, "diff --brief -w %s %s", OUTPUT_IMAGE, OUTPUT_IMAGE_GOLDEN);
@@ -86,14 +86,15 @@ int main()
     //     printf("------------- Test Passed!\n");
     // }
 
-	return 0;
+	// return 0;
 
     // // stream out the output image
-	for(int i = 0 ; i < IMAGE_SIZE*IMAGE_SIZE*IMAGE_CHANNELS ; i++){
-		img_out_stream >> img_out[i];
-		cout << img_out[i] << endl;
-	}
-    cout << "Loading Output stream " << endl;
+	// for(int i = 0 ; i < IMAGE_SIZE*IMAGE_SIZE*IMAGE_CHANNELS ; i++){
+	// 	STREAM_IN_TYPE out_val;
+	// 	dst_axi >> out_val;
+	// 	cout << out_val.data << endl;
+	// }
+    // cout << "Loading Output stream " << endl;
 
     // // read GT of teh output image
 	// FILE* img_out_head = fopen("img_out.txt","r");
@@ -135,13 +136,13 @@ void load_img(hls::stream<STREAM_IN_TYPE >& stream_in, string filename){
 	FILE* img_in_head = fopen(filename.c_str(),"r");
 	for(int i = 0; i < SIZE; i++){
         // data_type temp;
-		data_type temp;
-		fscanf(img_in_head, "%f", &temp);
+		float temp_f;
+		fscanf(img_in_head, "%f", &temp_f);
+		half temp = temp_f;
 		// cout << temp << endl;
 		STREAM_IN_TYPE temp_axi;
 		temp_axi.data = temp;
         stream_in << temp_axi;
     }
-	// assert(0);
     cout << "Done loading " << filename << endl;
 }

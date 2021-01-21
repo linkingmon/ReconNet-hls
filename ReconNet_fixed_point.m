@@ -21,6 +21,8 @@ img = ones(img_size*8, img_size*8)*pad;
 img_final_out = zeros(img_size*8, img_size*8);
 img_L3 = zeros(img_size*8, img_size*8);
 [test, map] = imread('test_images/barbara.tif');
+
+% write_img(test, 'golden/barbara.txt')
 % subplot(1,2,1);
 % imshow(test, map);
 img(1:256, 1:256) = test;
@@ -167,6 +169,8 @@ end
 % a = [11];
 % disp(a(1))
 L1 = conv2d(img_in, weight_1, bias_1);
+% L1(1:5,1:5,1:2)
+% pause
 L1 = chop(L1, opt_h);
 % L11 = L1(1,1,:);
 L2 = conv2d(L1, weight_2, bias_2);
@@ -338,5 +342,4 @@ function psnr = psnr1(img1, img2)
        psnr = 10 * log10(255.0*255.0/mse);
    end
 end
-
 

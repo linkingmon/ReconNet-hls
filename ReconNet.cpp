@@ -186,7 +186,7 @@ void myAXIvideo2Mat(hls::stream<STREAM_IN_TYPE >& AXI_video_strm,
                  hls::stream<data_type> img_in_stream_ary[8])
 {
     STREAM_IN_TYPE axi;
-    unsigned char pix;
+    data_type pix;
 //     bool sof = 0;
 //  loop_wait_for_start: while (!sof) {
 // #pragma HLS pipeline II=1
@@ -222,6 +222,9 @@ void myAXIvideo2Mat(hls::stream<STREAM_IN_TYPE >& AXI_video_strm,
 			data_type out_pix = pix;
 			// out_pix = out_pix / 255;
 			out_pix = out_pix / 255;
+			// cout << pix << endl;
+			// cout << out_pix << endl;
+			// assert(0);
             int test = pix;
             img_in_stream_ary[img_num] << out_pix;
         }
@@ -233,6 +236,7 @@ void myAXIvideo2Mat(hls::stream<STREAM_IN_TYPE >& AXI_video_strm,
 //            eol = axi.last.to_int();
 //        }
     }
+	// assert(0);
 }
 
 template<int W, int IMAGE_ROWS, int IMAGE_COLS, int T, int PATCH_SIZE>
@@ -262,7 +266,8 @@ void myMat2AXIvideo(hls::stream<STREAM_IN_TYPE >& AXI_video_strm,
             // cout << in_pix << endl;
 				
 			if(i < IMAGE_ROWS && j < IMAGE_COLS){
-				unsigned char pix = in_pix * 255;
+				// unsigned char pix = in_pix * 255;
+				data_type pix = in_pix * 255;
 				axi.data = pix;
                 // for(int k = 0 ; k < 3 ; k++)
 				//     hls::AXISetBitFields(axi, k*8, 8, pix);
@@ -334,6 +339,8 @@ void ReconNet_patch(hls::stream<data_type> img_in_stream_ary[PATCH_COLS], hls::s
 			// template<int INPUT_SIZE, int INPUT_CHANNELS, int KERNEL_SIZE, int FILTERS, int STRIDE>
             pad_layer<5,1,PATCH_SIZES>(img_pad_out, img_in_stream_ary[n_stream]);
             conv_layer<PATCH_SIZES+10, 1, 11, 64, 1>(conv1_out, img_pad_out, kernel1_weight, kernel1_bias);
+            // show_stream(conv1_out,33, 64);
+
             conv_layer<PATCH_SIZES, 64, 1, 32, 1>(conv2_out, conv1_out, kernel2_weight, kernel2_bias);
             pad_layer<3,32,PATCH_SIZES>(conv2_pad_out, conv2_out);
             conv_layer<PATCH_SIZES+6, 32, 7, 1, 1>(conv3_out, conv2_pad_out, kernel3_weight, kernel3_bias);
