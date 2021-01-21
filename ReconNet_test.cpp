@@ -58,22 +58,23 @@ int main()
 
 	hls::stream<STREAM_IN_TYPE> src_axi;
 	hls::stream<STREAM_IN_TYPE > dst_axi;
-	IplImage* src = cvLoadImage(INPUT_IMAGE);
-    cout << "Load image success " << endl;
-    IplImage* dst = cvCreateImage(cvGetSize(src), src->depth, src->nChannels);
+	// IplImage* src = cvLoadImage(INPUT_IMAGE);
+    // cout << "Load image success " << endl;
+    // IplImage* dst = cvCreateImage(cvGetSize(src), src->depth, src->nChannels);
     // IplImage2AXIvideo(src, src_axi);
 
     load_img<IMAGE_SIZE*IMAGE_SIZE*IMAGE_CHANNELS>(src_axi, "barbara.txt");
+    cout << "Load image success " << endl;
 
     // pass through kernel
     cout << "Start Kernel " << endl;
     ReconNet(src_axi, dst_axi);
     cout << "Done Kernel " << endl;
 
-	AXIvideo2IplImage(dst_axi, dst);
-	cvSaveImage(OUTPUT_IMAGE, dst);
-	cvReleaseImage(&src);
-	cvReleaseImage(&dst);
+	// AXIvideo2IplImage(dst_axi, dst);
+	// cvSaveImage(OUTPUT_IMAGE, dst);
+	// cvReleaseImage(&src);
+	// cvReleaseImage(&dst);
 
     // char tempbuf[2000];
     // sprintf(tempbuf, "diff --brief -w %s %s", OUTPUT_IMAGE, OUTPUT_IMAGE_GOLDEN);
@@ -89,11 +90,12 @@ int main()
 	// return 0;
 
     // // stream out the output image
-	// for(int i = 0 ; i < IMAGE_SIZE*IMAGE_SIZE*IMAGE_CHANNELS ; i++){
-	// 	STREAM_IN_TYPE out_val;
-	// 	dst_axi >> out_val;
-	// 	cout << out_val.data << endl;
-	// }
+	cout << "Print output image value in floating point datatype" << '\n';
+	for(int i = 0 ; i < IMAGE_SIZE*IMAGE_SIZE*IMAGE_CHANNELS ; i++){
+		STREAM_IN_TYPE out_val;
+		dst_axi >> out_val;
+		cout << out_val.data << endl;
+	}
     // cout << "Loading Output stream " << endl;
 
     // // read GT of teh output image

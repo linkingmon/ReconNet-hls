@@ -1,5 +1,6 @@
 clear, clc
 mkdir correct
+mkdir golden
 format long
 % rng(1);
 img_size = 33;
@@ -22,7 +23,7 @@ img_final_out = zeros(img_size*8, img_size*8);
 img_L3 = zeros(img_size*8, img_size*8);
 [test, map] = imread('test_images/barbara.tif');
 
-% write_img(test, 'golden/barbara.txt')
+write_img(test, 'golden/barbara.txt')
 % subplot(1,2,1);
 % imshow(test, map);
 img(1:256, 1:256) = test;
