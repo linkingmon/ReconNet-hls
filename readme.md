@@ -3,11 +3,11 @@
 
 ## Introduction
 
-In order to reduce the trassmission storage for high resolution images, the compressive sensing techniques is usually applied. For a high resolution image (or data), we can measure it by a sensing matrix $\Phi$ to form a compressed signal $y$ with much less size (Fig. 1). By trasmitting this compressed signal, the trassmission storage can be drastically reduce. <br>
+In order to reduce the trassmission storage for high resolution images, the compressive sensing techniques is usually applied. For a high resolution image (or data), we can measure it by a sensing matrix to form a compressed signal y with much less size (Fig. 1). By trasmitting this compressed signal, the trassmission storage can be drastically reduce. <br>
 
 ![](https://i.imgur.com/WlAZTM9.jpg)
 
-However, The difficulties for compressive sensing is to recover the orignal signal $x$ from the compressed signal, since the linear system to solve is under-determined. <br>
+However, The difficulties for compressive sensing is to recover the orignal signal x from the compressed signal, since the linear system to solve is under-determined. <br>
 
 There are varities of methods for solving the compressive sensing problem. The conventional methods usually solved it by approximating it into a convex programming problem and this can get quite good performance. These days, deep learning methods are applied for solving this problem and get even better performance. Thus, we aim to implement by a so called ReconNet model (Fig. 2).<br>
 
@@ -16,6 +16,9 @@ There are varities of methods for solving the compressive sensing problem. The c
 The ReconNet structure is consist of several convolution blocks. Each convolutional block is has three convolution layers with 11x11x64, 1x1x32, 7x7x1 size. Fig. 3 shows a ReconNet with two conv. blocks, which is also the structure choose to accelerate by hls solution.<br>
 
 ![](https://i.imgur.com/G4MZyL8.jpg)
+
+## Model training 
+The source code of the training process is at [this respository](https://github.com/tingyungchen/ReconNet).
 
 ## HLS implementation
 **Model quantization**
